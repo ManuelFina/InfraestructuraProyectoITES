@@ -1,0 +1,32 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>Orders</title>
+  <style>
+    body{font-family:Arial;margin:20px}
+    table{border-collapse:collapse;width:100%}
+    th,td{border:1px solid #ddd;padding:8px}
+    thead{background:#0b3d91;color:#fff}
+  </style>
+</head>
+<body>
+  <h1>Orders (read-only)</h1>
+  <table>
+    <thead><tr><th>ID</th><th>Customer</th><th>Item</th><th>Qty</th><th>Created</th></tr></thead>
+    <tbody>
+      {% for r in rows %}
+        <tr>
+          <td>{{ r.id }}</td>
+          <td>{{ r.customer }}</td>
+          <td>{{ r.item }}</td>
+          <td>{{ r.qty }}</td>
+          <td>{{ r.created_at }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="5">No hay datos</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</body>
+</html>

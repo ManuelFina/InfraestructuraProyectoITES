@@ -1,0 +1,128 @@
+{
+  "name": "MQTT Orders Request/Reply",
+  "nodes": [
+    {
+      "parameters": {
+        "topic": "lab/g1/req/orders.create",
+        "qos": 1
+      },
+      "name": "MQTT Trigger",
+      "type": "n8n-nodes-base.mqttTrigger",
+      "typeVersion": 1,
+      "position": [200, 200],
+      "credentials": {
+        "mqtt": {
+          "id": "YOUR_MQTT_CREDENTIAL_ID",
+          "name": "Mosquitto"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "table": "orders",
+        "columns": [
+          {
+            "column": "customer",
+            "value": "={{$json[\"data\"][\"customer\"]}}"
+          },
+          {
+            "column": "item",
+            "value": "={{$json[\"data\"][\"item\"]}}"
+          },
+          {
+            "column": "qty",
+            "value": "={{$json[\"data\"][\"qty\"]}}"
+          }
+        ]
+      },
+      "name": "Insert Order",
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 1,
+      "position": [450, 200],
+      "credentials": {
+        "mySql": {
+          "id": "YOUR_MYSQL_CREDENTIAL_ID",
+          "name": "MySQL LabDB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "ok",
+              "value": "true"
+            },
+            {
+              "name": "correlation_id",
+              "value": "={{$json[\"correlation_id\"]}}"
+            },
+            {
+              "name": "result",
+              "value": "={{JSON.stringify($json)}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Prepare Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [700, 200]
+    },
+    {
+      "parameters": {
+        "topic": "={{$json[\"reply_to\"] + '/' + $json[\"correlation_id\"]}}",
+        "qos": 1,
+        "message": "={{JSON.stringify($json)}}"
+      },
+      "name": "MQTT Publish",
+      "type": "n8n-nodes-base.mqtt",
+      "typeVersion": 1,
+      "position": [950, 200],
+      "credentials": {
+        "mqtt": {
+          "id": "YOUR_MQTT_CREDENTIAL_ID",
+          "name": "Mosquitto"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "MQTT Trigger": {
+      "main": [
+        [
+          {
+            "node": "Insert Order",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Order": {
+      "main": [
+        [
+          {
+            "node": "Prepare Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Response": {
+      "main": [
+        [
+          {
+            "node": "MQTT Publish",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

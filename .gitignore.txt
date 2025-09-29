@@ -1,0 +1,51 @@
+```
+# Archivos de entorno
+.env
+.env.*
+
+# Carpetas de datos persistentes (MySQL, Mosquitto, etc.)
+data/
+mysql/
+mosquitto/data/
+mosquitto/log/
+n8n/.n8n/
+
+# Archivos de logs
+*.log
+logs/
+*.pid
+
+# Python (Flask)
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.db
+*.sqlite3
+
+# Configuración de IDEs
+.vscode/
+.idea/
+*.swp
+
+# Docker
+docker-compose.override.yml
+.docker/
+*.bak
+*.tmp
+
+# Node / n8n
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Exportaciones temporales
+*.json.tmp
+*.tar
+*.gz
+
+# Otros innecesarios
+.DS_Store
+Thumbs.db
+```
