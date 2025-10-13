@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Radar de Sensor Ultrasónico</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 100%);
+            color: #00ff41;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            width: 100%;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            text-shadow: 0 0 10px #00ff41;
+            font-size: 2.5em;
+        }
+
+        .stats-panel {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: rgba(0, 255, 65, 0.1);
+            border: 2px solid #00ff41;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 0 20px rgba(0, 255, 65, 0.3);
+        }
+
+        .stat-label {
+            font-size: 0.9em;
+            opacity: 0.8;
+            margin-bottom: 10px;
+        }
+
+        .stat-value {
+            font-size: 1.8em;
+            font-weight: bold;
+        }
+
+        .radar-container {
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+
+        #radarCanvas {
+            background: rgba(10, 14, 39, 0.8);
+            border: 3px solid #00ff41;
+            border-radius: 10px;
+            box-shadow: 0 0 30px rgba(0, 255, 65, 0.5);
+        }
+
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        button {
+            background: rgba(0, 255, 65, 0.2);
+            border: 2px solid #00ff41;
+            color: #00ff41;
+            padding: 12px 24px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: all 0.3s;
+        }
+
+        button:hover {
+            background: rgba(0, 255, 65, 0.4);
+            box-shadow: 0 0 15px rgba(0, 255, 65, 0.6);
+        }
+
+        .status {
+            text-align: center;
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 5px;
+            background: rgba(0, 255, 65, 0.1);
+        }
+
+        .status.connected {
+            color: #00ff41;
+        }
+
+        .status.error {
+            color: #ff4444;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎯 Radar Ultrasónico</h1>
+        
+        <div class="stats-panel">
+            <div class="stat-card">
+                <div class="stat-label">Distancia Actual</div>
+                <div class="stat-value" id="currentDistance">-- cm</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Ángulo Actual</div>
+                <div class="stat-value" id="currentAngle">-- °</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Total Lecturas</div>
+                <div class="stat-value" id="totalReadings">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Distancia Promedio</div>
+                <div class="stat-value" id="avgDistance">-- cm</div>
+            </div>
+        </div>
+
+        <div class="radar-container">
+            <canvas id="radarCanvas" width="600" height="600"></canvas>
+        </div>
+
+        <div class="controls">
+            <button onclick="toggleScanning()">⏯️ Pausar/Reanudar</button>
+            <button onclick="clearData()">🗑️ Limpiar Datos</button>
+        </div>
+
+        <div class="status connected" id="status">
+            ● Conectado - Esperando datos...
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('radarCanvas');
+        const ctx = canvas.getContext('2d');
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+        const maxRadius = Math.min(centerX, centerY) - 40;
+        
+        let sensorData = [];
+        let isScanning = true;
+        let scanAngle = 0;
+
+        // Dibujar el radar
+        function drawRadar() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Fondo con efecto de barrido
+            const gradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, maxRadius);
+            gradient.addColorStop(0, 'rgba(0, 255, 65, 0.1)');
+            gradient.addColorStop(1, 'rgba(0, 255, 65, 0.02)');
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, maxRadius, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Círculos concéntricos
+            ctx.strokeStyle = 'rgba(0, 255, 65, 0.3)';
+            ctx.lineWidth = 1;
+            for (let i = 1; i <= 4; i++) {
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, (maxRadius / 4) * i, 0, Math.PI * 2);
+                ctx.stroke();
+                
+                // Etiquetas de distancia
+                ctx.fillStyle = 'rgba(0, 255, 65, 0.6)';
+                ctx.font = '12px monospace';
+                ctx.fillText(`${i * 25} cm`, centerX + 5, centerY - (maxRadius / 4) * i + 5);
+            }
+            
+            // Líneas de ángulo
+            for (let angle = 0; angle < 360; angle += 30) {
+                const rad = (angle - 90) * Math.PI / 180;
+                ctx.beginPath();
+                ctx.moveTo(centerX, centerY);
+                ctx.lineTo(
+                    centerX + maxRadius * Math.cos(rad),
+                    centerY + maxRadius * Math.sin(rad)
+                );
+                ctx.stroke();
+                
+                // Etiquetas de ángulo
+                ctx.fillText(
+                    `${angle}°`,
+                    centerX + (maxRadius + 20) * Math.cos(rad) - 15,
+                    centerY + (maxRadius + 20) * Math.sin(rad) + 5
+                );
+            }
+            
+            // Línea de barrido
+            if (isScanning) {
+                const rad = (scanAngle - 90) * Math.PI / 180;
+                const sweepGradient = ctx.createLinearGradient(
+                    centerX, centerY,
+                    centerX + maxRadius * Math.cos(rad),
+                    centerY + maxRadius * Math.sin(rad)
+                );
+                sweepGradient.addColorStop(0, 'rgba(0, 255, 65, 0.8)');
+                sweepGradient.addColorStop(1, 'rgba(0, 255, 65, 0)');
+                
+                ctx.strokeStyle = sweepGradient;
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.moveTo(centerX, centerY);
+                ctx.lineTo(
+                    centerX + maxRadius * Math.cos(rad),
+                    centerY + maxRadius * Math.sin(rad)
+                );
+                ctx.stroke();
+                
+                scanAngle = (scanAngle + 2) % 360;
+            }
+            
+            // Dibujar objetos detectados
+            drawDetectedObjects();
+        }
+
+        function drawDetectedObjects() {
+            sensorData.forEach((point, idx) => {
+                const distance = point.distance;
+                const angle = point.angle;
+                
+                if (distance > 100) return; // Fuera de rango
+                
+                const rad = (angle - 90) * Math.PI / 180;
+                const radius = (distance / 100) * maxRadius;
+                
+                const x = centerX + radius * Math.cos(rad);
+                const y = centerY + radius * Math.sin(rad);
+                
+                // Calcular opacidad basada en el índice (más recientes más brillantes)
+                const opacity = 0.3 + (idx / sensorData.length) * 0.7;
+                
+                // Punto detectado
+                ctx.fillStyle = `rgba(255, 0, 100, ${opacity})`;
+                ctx.beginPath();
+                ctx.arc(x, y, 5, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Halo alrededor del punto
+                ctx.strokeStyle = `rgba(255, 0, 100, ${opacity * 0.5})`;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(x, y, 8, 0, Math.PI * 2);
+                ctx.stroke();
+            });
+        }
+
+        // Obtener datos del servidor
+        async function fetchData() {
+            try {
+                const response = await fetch('/api/sensor/latest');
+                const data = await response.json();
+                
+                if (data.length > 0) {
+                    sensorData = data.slice(0, 50).reverse(); // Últimos 50 puntos
+                    
+                    // Actualizar estadísticas
+                    const latest = data[0];
+                    document.getElementById('currentDistance').textContent = `${latest.distance.toFixed(1)} cm`;
+                    document.getElementById('currentAngle').textContent = `${latest.angle.toFixed(0)}°`;
+                }
+                
+                // Obtener estadísticas generales
+                const statsResponse = await fetch('/api/sensor/stats');
+                const stats = await statsResponse.json();
+                
+                document.getElementById('totalReadings').textContent = stats.total_readings;
+                if (stats.avg_distance) {
+                    document.getElementById('avgDistance').textContent = `${stats.avg_distance.toFixed(1)} cm`;
+                }
+                
+                document.getElementById('status').textContent = `● Conectado - Última actualización: ${new Date().toLocaleTimeString()}`;
+                document.getElementById('status').className = 'status connected';
+                
+            } catch (error) {
+                console.error('Error fetching data:', error);
+                document.getElementById('status').textContent = '● Error de conexión';
+                document.getElementById('status').className = 'status error';
+            }
+        }
+
+        function toggleScanning() {
+            isScanning = !isScanning;
+        }
+
+        async function clearData() {
+            if (confirm('¿Estás seguro de que deseas eliminar todos los datos?')) {
+                try {
+                    await fetch('/api/sensor/clear', { method: 'POST' });
+                    sensorData = [];
+                    alert('Datos eliminados correctamente');
+                } catch (error) {
+                    alert('Error al eliminar datos');
+                }
+            }
+        }
+
+        // Animación del radar
+        function animate() {
+            drawRadar();
+            requestAnimationFrame(animate);
+        }
+
+        // Iniciar
+        animate();
+        fetchData();
+        setInterval(fetchData, 1000); // Actualizar cada segundo
+    </script>
+</body>
+</html>

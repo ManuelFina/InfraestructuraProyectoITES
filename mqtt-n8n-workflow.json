@@ -1,128 +1,84 @@
 {
-  "name": "MQTT Orders Request/Reply",
+  "name": "Flujo Ultrasónico MQTT → MySQL (FIX parse)",
   "nodes": [
     {
       "parameters": {
-        "topic": "lab/g1/req/orders.create",
-        "qos": 1
+        "broker": "mqtt://mosquitto:1883",
+        "topic": "tank/esp32_01/ultrasonic/measurements",
+        "qos": 0
       },
+      "id": "MQTTTrigger",
       "name": "MQTT Trigger",
       "type": "n8n-nodes-base.mqttTrigger",
       "typeVersion": 1,
-      "position": [200, 200],
+      "position": [200, 300],
       "credentials": {
         "mqtt": {
-          "id": "YOUR_MQTT_CREDENTIAL_ID",
-          "name": "Mosquitto"
+          "id": "mqtt_local",
+          "name": "MQTT Local"
         }
       }
+    },
+    {
+      "parameters": {
+        "functionCode": "const raw = $json.message ?? $json.payload ?? $json;\nlet m = raw;\nif (typeof raw === 'string') {\n  try { m = JSON.parse(raw); } catch (e) { throw new Error('Payload no es JSON válido: ' + raw); }\n}\nreturn [{\n  json: {\n    device_id: m.deviceId ?? 'unknown',\n    distance_cm: Number(m.distance_cm ?? m.distance ?? 0),\n    angle_deg:   m.angle_deg != null ? Number(m.angle_deg) : (m.angle != null ? Number(m.angle) : null),\n    raw_us:      m.raw_us != null ? Number(m.raw_us) : null,\n    correlation_id: m.correlationId ?? null\n  }\n}];"
+      },
+      "id": "NormalizeFn",
+      "name": "Normalizar Datos",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [520, 300]
     },
     {
       "parameters": {
         "operation": "insert",
-        "table": "orders",
+        "table": "ultrasonic_readings",
         "columns": [
-          {
-            "column": "customer",
-            "value": "={{$json[\"data\"][\"customer\"]}}"
-          },
-          {
-            "column": "item",
-            "value": "={{$json[\"data\"][\"item\"]}}"
-          },
-          {
-            "column": "qty",
-            "value": "={{$json[\"data\"][\"qty\"]}}"
-          }
+          "device_id",
+          "distance_cm",
+          "angle_deg",
+          "raw_us",
+          "correlation_id"
         ]
       },
-      "name": "Insert Order",
+      "id": "MySQLInsert",
+      "name": "Insertar en MySQL",
       "type": "n8n-nodes-base.mySql",
       "typeVersion": 1,
-      "position": [450, 200],
+      "position": [840, 300],
       "credentials": {
         "mySql": {
-          "id": "YOUR_MYSQL_CREDENTIAL_ID",
-          "name": "MySQL LabDB"
+          "id": "mysql_tankdb",
+          "name": "MySQL - tankdb"
         }
       }
     },
     {
       "parameters": {
-        "values": {
-          "string": [
-            {
-              "name": "ok",
-              "value": "true"
-            },
-            {
-              "name": "correlation_id",
-              "value": "={{$json[\"correlation_id\"]}}"
-            },
-            {
-              "name": "result",
-              "value": "={{JSON.stringify($json)}}"
-            }
-          ]
-        },
-        "options": {}
+        "broker": "mqtt://mosquitto:1883",
+        "topic": "tank/ultrasonic/resp",
+        "qos": 0,
+        "payload": "={\"ok\": true, \"deviceId\": \"={{$json.device_id}}\", \"correlationId\": \"={{$json.correlation_id}}\", \"message\": \"Dato almacenado correctamente\"}"
       },
-      "name": "Prepare Response",
-      "type": "n8n-nodes-base.set",
-      "typeVersion": 1,
-      "position": [700, 200]
-    },
-    {
-      "parameters": {
-        "topic": "={{$json[\"reply_to\"] + '/' + $json[\"correlation_id\"]}}",
-        "qos": 1,
-        "message": "={{JSON.stringify($json)}}"
-      },
-      "name": "MQTT Publish",
+      "id": "MQTTAck",
+      "name": "Responder ACK (MQTT)",
       "type": "n8n-nodes-base.mqtt",
       "typeVersion": 1,
-      "position": [950, 200],
+      "position": [1160, 300],
       "credentials": {
         "mqtt": {
-          "id": "YOUR_MQTT_CREDENTIAL_ID",
-          "name": "Mosquitto"
+          "id": "mqtt_local",
+          "name": "MQTT Local"
         }
       }
     }
   ],
   "connections": {
-    "MQTT Trigger": {
-      "main": [
-        [
-          {
-            "node": "Insert Order",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Insert Order": {
-      "main": [
-        [
-          {
-            "node": "Prepare Response",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Prepare Response": {
-      "main": [
-        [
-          {
-            "node": "MQTT Publish",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    }
-  }
+    "MQTT Trigger": { "main": [[{ "node": "Normalizar Datos", "type": "main", "index": 0 }]] },
+    "Normalizar Datos": { "main": [[{ "node": "Insertar en MySQL", "type": "main", "index": 0 }]] },
+    "Insertar en MySQL": { "main": [[{ "node": "Responder ACK (MQTT)", "type": "main", "index": 0 }]] }
+  },
+  "active": true,
+  "settings": { "timezone": "America/Argentina/Salta" },
+  "versionId": "2"
 }
