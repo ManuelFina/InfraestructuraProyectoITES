@@ -4,9 +4,9 @@ from flask import Flask, jsonify, render_template
 
 #estas credenciales estan mal
 DB_HOST = os.getenv("DB_HOST", "mysql")
-DB_NAME = os.getenv("DB_NAME", "tankdb")
-DB_USER = os.getenv("DB_USER", "tankuser")
-DB_PASS = os.getenv("DB_PASS", "tankpass")
+DB_NAME = os.getenv("DB_NAME", "labdb")
+DB_USER = os.getenv("DB_USER", "labuser")
+DB_PASS = os.getenv("DB_PASS", "labpass")
 
 app = Flask(__name__)
 
