@@ -1,62 +1,61 @@
 import paho.mqtt.client as mqtt
 import json
-import random
 import time
 import math
 from datetime import datetime
+import os
 
-# CONFIGURACIÓN DEL BROKER MQTT
-BROKER_HOST = "localhost"      # o IP del servidor Docker
-BROKER_PORT = 1883
+# CONFIGURACIÓN DEL BROKER MQTT (nombre del servicio en Docker o localhost)
+BROKER_HOST = os.getenv("BROKER_HOST", "localhost")
+BROKER_PORT = int(os.getenv("BROKER_PORT", "1883"))
 TOPIC = "tank/esp32_01/ultrasonic/measurements"
 
-# SIMULACIÓN DE DATOS
+# DATOS DEL DISPOSITIVO
 DEVICE_ID = "esp32_01"
 
-# el ángulo gira de 0 a 180 grados y vuelve
+# Variables de simulación
 angle = 0
 direction = 1  # 1 = sube, -1 = baja
 
-# debug
+# --- CALLBACKS DE DEPURACIÓN ---
 def on_connect(client, userdata, flags, rc):
     if rc == 0:
-        print("✅ Conectado al broker MQTT")
+        print(f"✅ Conectado al broker MQTT ({BROKER_HOST}:{BROKER_PORT})")
     else:
         print("❌ Error de conexión. Código:", rc)
 
 def on_publish(client, userdata, mid):
     print("📤 Mensaje publicado correctamente.")
 
-# CLIENTE MQTT
+# --- CONFIGURACIÓN DEL CLIENTE ---
 client = mqtt.Client()
 client.on_connect = on_connect
 client.on_publish = on_publish
 
-print("🔌 Conectando al broker MQTT...")
+print(f"🔌 Conectando al broker MQTT en {BROKER_HOST}:{BROKER_PORT}...")
 client.connect(BROKER_HOST, BROKER_PORT, 60)
 client.loop_start()
 
-# LOOP DE ENVÍO PERIÓDICO
+# --- BUCLE PRINCIPAL ---
 try:
     while True:
-        # generar distancia simulada (ondas entre 10 y 90 cm)
+        # Simula distancia entre 10 y 90 cm (onda sinusoidal)
         distance = 50 + 40 * math.sin(math.radians(angle))
-        raw_us = int(distance * 58)  # valor de pulso aproximado
+        raw_us = int(distance * 58)  # microsegundos aproximados
 
         payload = {
-            "deviceId": DEVICE_ID,
+            "device_id": DEVICE_ID,
             "distance_cm": round(distance, 2),
-            "angle_deg": angle,
+            "angle_deg": round(angle, 2),
             "raw_us": raw_us,
-            "correlationId": f"sim-{int(time.time())}"
+            "correlation_id": f"sim-{int(time.time())}"
         }
 
-        # convertir a JSON y publicar
         msg = json.dumps(payload)
         client.publish(TOPIC, msg)
         print(f"[{datetime.now().strftime('%H:%M:%S')}] → {msg}")
 
-        # avanzar ángulo (efecto "barrido" del servo)
+        # Movimiento de ángulo
         angle += direction * 10
         if angle >= 180:
             direction = -1
@@ -65,7 +64,7 @@ try:
             direction = 1
             angle = 0
 
-        time.sleep(1)  # cada 1 segundo
+        time.sleep(1)
 
 except KeyboardInterrupt:
     print("\n🛑 Simulación detenida por el usuario.")
