@@ -1,86 +1,111 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Radar Ultrasónico</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lecturas de Radar Ultrasonido</title>
   <style>
     body {
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      background: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 100%);
-      color: #00ff41;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      min-height: 100vh;
+      font-family: "Segoe UI", Arial, sans-serif;
+      margin: 0;
       padding: 20px;
+      background-color: #f8f9fa;
+      color: #222;
     }
-    h1 { text-shadow: 0 0 10px #00ff41; margin-bottom: 15px; }
-    #radarCanvas {
-      background: rgba(10, 14, 39, 0.8);
-      border: 3px solid #00ff41;
-      border-radius: 10px;
-      box-shadow: 0 0 30px rgba(0, 255, 65, 0.5);
+    h1 {
+      text-align: center;
+      color: #007bff;
+      margin-bottom: 20px;
     }
-    .stats { margin-top: 20px; text-align: center; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background-color: white;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    thead {
+      background-color: #007bff;
+      color: white;
+    }
+    th, td {
+      padding: 10px 14px;
+      text-align: left;
+    }
+    th {
+      text-transform: uppercase;
+      font-size: 13px;
+      letter-spacing: 0.5px;
+    }
+    tr:nth-child(even) {
+      background-color: #f2f6fc;
+    }
+    tr:hover {
+      background-color: #e9f1ff;
+    }
+    .muted {
+      color: #555;
+      font-size: 14px;
+      text-align: center;
+      margin-top: 10px;
+    }
   </style>
 </head>
 <body>
-  <h1>🎯 Radar Ultrasónico</h1>
-  <canvas id="radarCanvas" width="600" height="600"></canvas>
+  <h1>📡 Últimas Lecturas</h1>
 
-  <div class="stats">
-    <p><b>Total lecturas:</b> <span id="total">--</span></p>
-    <p><b>Distancia promedio:</b> <span id="avg">--</span> cm</p>
-  </div>
+  <table id="tabla">
+    <thead>
+      <tr>
+        <th>Hora</th>
+        <th>Ángulo (°)</th>
+        <th>Distancia (cm)</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td colspan="3" style="text-align:center; color:#777;">Cargando...</td></tr>
+    </tbody>
+  </table>
+
+  <p class="muted">Ultimas 15 lecturas.</p>
 
   <script>
-    const canvas = document.getElementById('radarCanvas');
-    const ctx = canvas.getContext('2d');
-    const cx = canvas.width / 2, cy = canvas.height / 2;
-    const maxR = Math.min(cx, cy) - 40;
+    const API_URL = "/api/sensor/latest?limit=15";
+    const tbody = document.querySelector("#tabla tbody");
 
-    function drawBase() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.strokeStyle = 'rgba(0,255,65,0.3)';
-      for (let i = 1; i <= 4; i++) {
-        ctx.beginPath();
-        ctx.arc(cx, cy, (maxR / 4) * i, 0, 2 * Math.PI);
-        ctx.stroke();
-      }
-    }
-
-    async function loadData() {
+    async function actualizar() {
       try {
-        const r = await fetch('/api/sensor/latest');
-        const data = await r.json();
-        const s = await fetch('/api/sensor/stats');
-        const stats = await s.json();
+        const res = await fetch(API_URL, { cache: "no-store" });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        const datos = await res.json();
 
-        document.getElementById('total').textContent = stats.total;
-        document.getElementById('avg').textContent = stats.avg_distance?.toFixed(1) || '--';
+        if (!Array.isArray(datos) || !datos.length) {
+          tbody.innerHTML = `<tr><td colspan="3" style="text-align:center; color:#777;">Sin datos</td></tr>`;
+          return;
+        }
 
-        drawBase();
+        const filas = datos.map(d => {
+          const hora = new Date(d.ts).toLocaleTimeString();
+          const angulo = Number(d.angle ?? d.angle_deg ?? 0).toFixed(1);
+          const distancia = Number(d.distance ?? d.distance_cm ?? 0).toFixed(1);
+          return `
+            <tr>
+              <td>${hora}</td>
+              <td>${angulo}</td>
+              <td>${distancia}</td>
+            </tr>
+          `;
+        }).join("");
 
-        data.forEach(p => {
-          const d = Math.min(p.distance, 100);
-          const a = p.angle || 0;
-          const rad = (a - 90) * Math.PI / 180;
-          const r = (d / 100) * maxR;
-          const x = cx + r * Math.cos(rad);
-          const y = cy + r * Math.sin(rad);
-          ctx.fillStyle = 'rgba(255, 0, 100, 0.8)';
-          ctx.beginPath();
-          ctx.arc(x, y, 4, 0, 2 * Math.PI);
-          ctx.fill();
-        });
+        tbody.innerHTML = filas;
       } catch (e) {
-        console.error(e);
+        console.error("Error al actualizar:", e);
       }
     }
 
-    setInterval(loadData, 1000);
-    loadData();
+    actualizar();
+    setInterval(actualizar, 1000);
   </script>
 </body>
 </html>
