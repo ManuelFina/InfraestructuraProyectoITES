@@ -1,0 +1,229 @@
+{
+  "name": "Ultrasonic MQTT → MySQL (readings + errors)",
+  "nodes": [
+    {
+      "parameters": {
+        "topics": "tank/esp32_01/ultrasonic/measurements",
+        "options": {}
+      },
+      "id": "52d6cdff-fc62-4ab4-847b-085fdb73535f",
+      "name": "MQTT_Trigger",
+      "type": "n8n-nodes-base.mqttTrigger",
+      "typeVersion": 1,
+      "position": [
+        48,
+        176
+      ],
+      "credentials": {
+        "mqtt": {
+          "id": "UoSzOPxUxcEfgSWc",
+          "name": "MQTT account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{$json.distance_cm}}",
+              "operation": "isGreaterThan",
+              "value2": 0
+            },
+            {
+              "value1": "={{$json.angle_deg}}",
+              "operation": "isGreaterThanOrEqual",
+              "value2": 0
+            }
+          ],
+          "string": [
+            {
+              "value1": "={{$json.device_id}}",
+              "operation": "isNotEmpty"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "693cff03-c96d-441b-9813-bb195d587dcf",
+      "name": "IF_Valid",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        512,
+        176
+      ]
+    },
+    {
+      "parameters": {
+        "table": "ultrasonic_readings",
+        "options": {}
+      },
+      "id": "48729c16-b2d6-4027-9da7-3ad6755225c0",
+      "name": "MySQL_InsertOK",
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2,
+      "position": [
+        784,
+        80
+      ],
+      "credentials": {
+        "mySql": {
+          "id": "5rWkaV3fPPkYYYcJ",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "table": "ultrasonic_errors",
+        "options": {}
+      },
+      "id": "1680c7d2-9a66-4bca-9413-22dc9c846129",
+      "name": "MySQL_InsertERR",
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2,
+      "position": [
+        960,
+        304
+      ],
+      "credentials": {
+        "mySql": {
+          "id": "5rWkaV3fPPkYYYcJ",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Compatible con las versiones nuevas de n8n\nconst item = $input.first();\nconst inJson = item.json || {};\n\nconst raw = inJson.payload ?? inJson.message ?? inJson;\n\nlet obj;\ntry {\n  obj = (typeof raw === 'string') ? JSON.parse(raw) : raw;\n} catch (e) {\n  // Si hay error al parsear JSON, devolvemos un objeto marcando el error\n  return {\n    json: {\n      __parse_error: String(e),\n      __raw: raw,\n      __topic: inJson.topic ?? null\n    }\n  };\n}\n\n// Devolvemos un solo objeto (no array)\nreturn {\n  json: {\n    device_id: obj.deviceId ?? obj.device_id ?? 'unknown',\n    distance_cm: Number(obj.distance_cm),\n    angle_deg: Number(obj.angle_deg),\n    raw_us: Number(obj.raw_us),\n    correlation_id: obj.correlationId ?? obj.correlation_id ?? null,\n  }\n};\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        288,
+        176
+      ],
+      "id": "1036a2cd-db95-44e2-a58c-fcea3e5441a5",
+      "name": "Code — Normalize"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\nconst j = item.json || {};\n\nlet reason = '';\n\nif (j.__parse_error) {\n  reason = `JSON parse error: ${j.__parse_error}`;\n} else {\n  const parts = [];\n  if (!(j.device_id && String(j.device_id).length)) parts.push('device_id missing');\n  if (!(Number.isFinite(j.distance_cm) && j.distance_cm > 0)) parts.push('distance_cm invalid');\n  if (!(Number.isFinite(j.angle_deg) && j.angle_deg >= 0)) parts.push('angle_deg invalid');\n  if (!Number.isFinite(j.raw_us)) parts.push('raw_us invalid');\n  reason = parts.join(', ') || 'unknown error';\n}\n\nreturn {\n  json: {\n    topic: j.__topic ?? null,\n    raw_payload: j.__raw ? String(j.__raw) : JSON.stringify(j),\n    error_msg: reason\n  }\n};\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        752,
+        304
+      ],
+      "id": "dc6865c3-c540-443a-a857-0b05a1bc46c6",
+      "name": "Code — Build Error Row"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "CALL purge_keep_last(10);\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.5,
+      "position": [
+        944,
+        32
+      ],
+      "id": "ce5446dc-6858-4f81-9243-3f48a92a667d",
+      "name": "purge_keep_last",
+      "credentials": {
+        "mySql": {
+          "id": "5rWkaV3fPPkYYYcJ",
+          "name": "MySQL account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "IF_Valid": {
+      "main": [
+        [
+          {
+            "node": "MySQL_InsertOK",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code — Build Error Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MQTT_Trigger": {
+      "main": [
+        [
+          {
+            "node": "Code — Normalize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code — Normalize": {
+      "main": [
+        [
+          {
+            "node": "IF_Valid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code — Build Error Row": {
+      "main": [
+        [
+          {
+            "node": "MySQL_InsertERR",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MySQL_InsertOK": {
+      "main": [
+        [
+          {
+            "node": "purge_keep_last",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "purge_keep_last": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "executionTimeout": 3600,
+    "availableInMCP": false
+  },
+  "versionId": "9538f538-b2ca-48a1-ae4b-18c3a9f4dbf5",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "149aca36f60e2310707fbfc81c795d21fbb445c51664e1ae99ac7c07286b1b37"
+  },
+  "id": "aOojXbVcbZMLIgLk",
+  "tags": []
+}
